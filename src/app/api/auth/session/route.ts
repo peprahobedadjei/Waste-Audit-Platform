@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { adminAuth, adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 import { SESSION_COOKIE, SESSION_MAX_AGE_MS } from "@/lib/session";
 
+// firebase-admin needs real Node APIs; it cannot run on the edge runtime.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 /**
  * Exchanges a Firebase ID token (obtained in the browser after sign-in) for an
  * httpOnly session cookie. The browser never holds a long-lived credential.

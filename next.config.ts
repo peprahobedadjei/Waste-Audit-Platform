@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
     bare 500 before our own error handling runs. Dev works either way, so this
     only shows up once deployed.
   */
-  serverExternalPackages: ["firebase-admin", "google-gax", "protobufjs"],
+  serverExternalPackages: ["firebase-admin"],
 
   images: {
     remotePatterns: [
