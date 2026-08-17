@@ -1,4 +1,7 @@
+import { notFound } from "next/navigation";
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
+import { getCurrentUser } from "@/lib/session";
+import { canEditSystemConfig } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui/card";
 import { DEFAULT_SETTINGS, type AuditSettings } from "@/lib/types";
 import { SettingsClient } from "./settings-client";
@@ -14,6 +17,11 @@ async function loadSettings(): Promise<AuditSettings> {
 }
 
 export default async function SettingsPage() {
+  // Settings change the flagging rules for every district, so they stay with
+  // the system administrator regardless of what a sub-admin is assigned.
+  const user = await getCurrentUser();
+  if (!user || !canEditSystemConfig(user)) notFound();
+
   const settings = await loadSettings();
 
   return (

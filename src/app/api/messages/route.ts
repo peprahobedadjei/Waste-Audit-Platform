@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { badRequest, requireUser, serverError } from "@/lib/api-auth";
+import { scopeFor } from "@/lib/permissions";
 import { sendEmail } from "@/lib/email";
 import { getBranding } from "@/lib/branding";
 import type { Message, MessageAudience } from "@/lib/types";
@@ -8,19 +9,35 @@ import type { Message, MessageAudience } from "@/lib/types";
 const FIRESTORE_BATCH_LIMIT = 500;
 
 export async function GET() {
-  const { error } = await requireUser();
+  const { user, error } = await requireUser();
   if (error) return error;
 
   try {
     const snap = await adminDb()
       .collection("messages")
       .orderBy("createdAt", "desc")
-      .limit(100)
+      .limit(200)
       .get();
 
-    const messages = snap.docs.map(
+    let messages = snap.docs.map(
       (doc) => ({ id: doc.id, ...doc.data() }) as Message,
     );
+
+    /*
+      The system administrator sees every message. That is deliberate and it is
+      disclosed in the compose screen - an accountability tool should not
+      contain channels the person accountable for it cannot see. Sub-admins see
+      only what they sent and what was addressed to them.
+    */
+    if (user.role !== "admin") {
+      messages = messages.filter(
+        (m) =>
+          m.sentBy === user.uid ||
+          (m.audience.type === "staff" &&
+            (m.audience.userIds ?? []).includes(user.uid)),
+      );
+    }
+
     return NextResponse.json({ messages });
   } catch {
     return serverError("Could not load messages.");
@@ -58,11 +75,30 @@ export async function POST(request: Request) {
 
   try {
     const db = adminDb();
+    const scope = scopeFor(user);
 
     // Resolve the audience to a concrete recipient list
     let recipients: { id: string; name: string; email: string }[] = [];
+    let isStaffMessage = false;
 
-    if (audience.type === "all") {
+    if (audience.type === "staff") {
+      // Sub-admins talking to each other and to the system administrator.
+      // Delivered in the dashboard, not to the auditors' app.
+      isStaffMessage = true;
+      if (!audience.userIds?.length) {
+        return badRequest("Select at least one recipient.");
+      }
+      const snaps = await Promise.all(
+        audience.userIds.map((id) => db.collection("users").doc(id).get()),
+      );
+      recipients = snaps
+        .filter((snap) => snap.exists && snap.data()?.status !== "inactive")
+        .map((snap) => ({
+          id: snap.id,
+          name: snap.data()!.name as string,
+          email: snap.data()!.email as string,
+        }));
+    } else if (audience.type === "all") {
       const snap = await db
         .collection("auditors")
         .where("status", "in", ["invited", "active"])
@@ -102,8 +138,28 @@ export async function POST(request: Request) {
         }));
     }
 
+    /*
+      A sub-admin may only message the auditors they manage. Enforced here
+      rather than in the compose screen, because the screen only decides what is
+      offered - this decides what is permitted.
+    */
+    if (!isStaffMessage && scope.kind === "scoped") {
+      const outOfScope = recipients.filter(
+        (r) => !scope.auditorIds.includes(r.id),
+      );
+      if (outOfScope.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              "You can only message auditors assigned to you. Remove the others and try again.",
+          },
+          { status: 403 },
+        );
+      }
+    }
+
     if (recipients.length === 0) {
-      return badRequest("That selection has no auditors in it.");
+      return badRequest("That selection has no one in it.");
     }
 
     const now = new Date().toISOString();
@@ -119,21 +175,25 @@ export async function POST(request: Request) {
       createdAt: now,
     });
 
-    // Fan out. Firestore caps a batch at 500 writes, so chunk for 160+ auditors.
-    for (let i = 0; i < recipients.length; i += FIRESTORE_BATCH_LIMIT) {
-      const chunk = recipients.slice(i, i + FIRESTORE_BATCH_LIMIT);
-      const batch = db.batch();
-      for (const recipient of chunk) {
-        batch.set(db.collection("notifications").doc(), {
-          auditorId: recipient.id,
-          messageId: messageRef.id,
-          title,
-          body: text,
-          readAt: null,
-          createdAt: now,
-        });
+    // Staff messages are read in the dashboard, so they need no per-auditor
+    // notification records - only the auditors' app polls that collection.
+    if (!isStaffMessage) {
+      // Firestore caps a batch at 500 writes, so chunk for 160+ auditors.
+      for (let i = 0; i < recipients.length; i += FIRESTORE_BATCH_LIMIT) {
+        const chunk = recipients.slice(i, i + FIRESTORE_BATCH_LIMIT);
+        const batch = db.batch();
+        for (const recipient of chunk) {
+          batch.set(db.collection("notifications").doc(), {
+            auditorId: recipient.id,
+            messageId: messageRef.id,
+            title,
+            body: text,
+            readAt: null,
+            createdAt: now,
+          });
+        }
+        await batch.commit();
       }
-      await batch.commit();
     }
 
     let emailsSent = 0;

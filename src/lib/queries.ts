@@ -1,7 +1,20 @@
 import "server-only";
 
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
+import { getCurrentUser } from "@/lib/session";
+import { hasAnyScope, scopeFor, type Scope } from "@/lib/permissions";
 import type { Auditor, District, Visit } from "@/lib/types";
+
+/**
+ * Resolves the signed-in user's scope. Every page that shows audit data starts
+ * here, so there is one definition of "what can this person see" rather than a
+ * filter re-implemented per screen.
+ */
+export async function currentScope(): Promise<Scope> {
+  const user = await getCurrentUser();
+  if (!user) return { kind: "scoped", districtIds: [], auditorIds: [] };
+  return scopeFor(user);
+}
 
 export type VisitFilters = {
   districtId?: string;
@@ -20,10 +33,12 @@ export type Lookups = {
   auditorNames: Record<string, string>;
 };
 
-export async function loadLookups(): Promise<Lookups> {
+export async function loadLookups(scope?: Scope): Promise<Lookups> {
   if (!isAdminConfigured()) {
     return { districts: [], auditors: [], districtNames: {}, auditorNames: {} };
   }
+
+  const effective = scope ?? (await currentScope());
 
   const db = adminDb();
   const [districtSnap, auditorSnap] = await Promise.all([
@@ -31,12 +46,17 @@ export async function loadLookups(): Promise<Lookups> {
     db.collection("auditors").orderBy("name").get(),
   ]);
 
-  const districts = districtSnap.docs.map(
+  let districts = districtSnap.docs.map(
     (doc) => ({ id: doc.id, ...doc.data() }) as District,
   );
-  const auditors = auditorSnap.docs.map(
+  let auditors = auditorSnap.docs.map(
     (doc) => ({ id: doc.id, ...doc.data() }) as Auditor,
   );
+
+  if (effective.kind === "scoped") {
+    districts = districts.filter((d) => effective.districtIds.includes(d.id));
+    auditors = auditors.filter((a) => effective.auditorIds.includes(a.id));
+  }
 
   const districtNames: Record<string, string> = {};
   for (const d of districts) districtNames[d.id] = d.name;
@@ -55,8 +75,16 @@ export async function loadLookups(): Promise<Lookups> {
  * dataset this size. Revisit if a single district ever exceeds a few thousand
  * visits per cycle.
  */
-export async function loadVisits(filters: VisitFilters = {}): Promise<Visit[]> {
+export async function loadVisits(
+  filters: VisitFilters = {},
+  scope?: Scope,
+): Promise<Visit[]> {
   if (!isAdminConfigured()) return [];
+
+  const effective = scope ?? (await currentScope());
+
+  // A sub-admin with nothing assigned sees nothing, not everything
+  if (!hasAnyScope(effective)) return [];
 
   const db = adminDb();
   let query = db.collection("visits") as FirebaseFirestore.Query;
@@ -77,6 +105,15 @@ export async function loadVisits(filters: VisitFilters = {}): Promise<Visit[]> {
   const snap = await query.limit(filters.limit ?? 500).get();
 
   let visits = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Visit);
+
+  /*
+    Scope visits by auditor rather than district. A sub-admin reviews the work
+    of the people they manage - if two of them split one district, each should
+    see their own auditors' submissions and not the other's.
+  */
+  if (effective.kind === "scoped") {
+    visits = visits.filter((v) => effective.auditorIds.includes(v.auditorId));
+  }
 
   if (filters.collected !== undefined) {
     visits = visits.filter((v) => v.collected === filters.collected);

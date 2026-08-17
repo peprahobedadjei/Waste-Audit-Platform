@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Home, MapPin } from "lucide-react";
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
+import { currentScope } from "@/lib/queries";
+import { hasAnyScope } from "@/lib/permissions";
 import { Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/card";
 import type { District, House } from "@/lib/types";
 
@@ -14,6 +16,9 @@ async function loadHouses(districtId?: string): Promise<{
 }> {
   if (!isAdminConfigured()) return { rows: [], districts: [] };
 
+  const scope = await currentScope();
+  if (!hasAnyScope(scope)) return { rows: [], districts: [] };
+
   const db = adminDb();
   const [districtSnap, houseSnap, visitSnap] = await Promise.all([
     db.collection("districts").orderBy("name").get(),
@@ -23,9 +28,13 @@ async function loadHouses(districtId?: string): Promise<{
     db.collection("visits").select("houseId").get(),
   ]);
 
-  const districts = districtSnap.docs.map(
+  let districts = districtSnap.docs.map(
     (doc) => ({ id: doc.id, ...doc.data() }) as District,
   );
+  if (scope.kind === "scoped") {
+    districts = districts.filter((d) => scope.districtIds.includes(d.id));
+  }
+
   const districtNames: Record<string, string> = {};
   for (const d of districts) districtNames[d.id] = d.name;
 
@@ -35,7 +44,10 @@ async function loadHouses(districtId?: string): Promise<{
     visitCounts[id] = (visitCounts[id] ?? 0) + 1;
   }
 
+  const allowedDistricts = new Set(districts.map((d) => d.id));
+
   const rows = houseSnap.docs
+    .filter((doc) => allowedDistricts.has(doc.data().districtId as string))
     .map((doc) => {
       const data = doc.data() as Omit<House, "id">;
       return {

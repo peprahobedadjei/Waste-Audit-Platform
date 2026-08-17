@@ -77,20 +77,31 @@ export async function sendAuditorInvite(args: {
   districtName: string;
   inviteUrl: string;
   appName: string;
+  role?: "auditor" | "manager";
 }) {
   const { to, auditorName, districtName, inviteUrl, appName } = args;
+  const role = args.role ?? "auditor";
+  const isManager = role === "manager";
+
+  const heading = isManager
+    ? "You have been given dashboard access"
+    : "You have been added as an auditor";
+
+  const intro = isManager
+    ? `Hello ${auditorName}, you have been given access to the ${appName} dashboard as a sub-administrator.`
+    : `Hello ${auditorName}, you have been added as an auditor${
+        districtName ? ` for <strong>${districtName}</strong> district` : ""
+      }.`;
+
+  const instruction = isManager
+    ? "Use the link below to set your password, then sign in on the web. This link can only be used once and expires in 7 days."
+    : "Use the link below to set your PIN, then sign in to the mobile app. This link can only be used once and expires in 7 days.";
 
   const html = layout(
     appName,
-    `You have been added as an auditor`,
-    `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">
-       Hello ${auditorName}, you have been added as an auditor for
-       <strong>${districtName}</strong> district.
-     </p>
-     <p style="font-size:15px;line-height:1.6;margin:0 0 24px">
-       Use the link below to set your PIN, then sign in to the mobile app.
-       This link can only be used once and expires in 7 days.
-     </p>
+    heading,
+    `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">${intro}</p>
+     <p style="font-size:15px;line-height:1.6;margin:0 0 24px">${instruction}</p>
      <a href="${inviteUrl}"
         style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;font-size:15px">
        Set up my account
@@ -99,12 +110,16 @@ export async function sendAuditorInvite(args: {
 
   const text =
     `Hello ${auditorName},\n\n` +
-    `You have been added as an auditor for ${districtName} district.\n\n` +
-    `Set your PIN here (single use, expires in 7 days):\n${inviteUrl}\n`;
+    (isManager
+      ? `You have been given access to the ${appName} dashboard as a sub-administrator.\n\nSet your password here`
+      : `You have been added as an auditor${districtName ? ` for ${districtName} district` : ""}.\n\nSet your PIN here`) +
+    ` (single use, expires in 7 days):\n${inviteUrl}\n`;
 
   await sendEmail({
     to,
-    subject: `${appName} - set up your auditor account`,
+    subject: isManager
+      ? `${appName} - set up your dashboard account`
+      : `${appName} - set up your auditor account`,
     html,
     text,
   });

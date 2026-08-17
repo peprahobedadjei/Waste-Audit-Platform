@@ -5,10 +5,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   Building2,
   ChartColumn,
   Flag,
   Home,
+  Shield,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -20,9 +22,12 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { roleLabel } from "@/lib/session-shared";
 import type { SessionUser } from "@/lib/session";
 import type { Branding } from "@/lib/branding-types";
 
+// adminOnly entries are hidden from sub-admins. The pages enforce this too -
+// hiding a link is presentation, not access control.
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/districts", label: "Districts", icon: Building2 },
@@ -32,8 +37,10 @@ const NAV = [
   { href: "/flagged", label: "Flagged queue", icon: Flag },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/reports", label: "Reports", icon: ChartColumn },
-  { href: "/branding", label: "Branding", icon: Palette },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/managers", label: "Sub-admins", icon: Shield, adminOnly: true },
+  { href: "/activity", label: "Activity", icon: Activity, adminOnly: true },
+  { href: "/branding", label: "Branding", icon: Palette, adminOnly: true },
+  { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
 
 export function AppShell({
@@ -55,9 +62,13 @@ export function AppShell({
     router.refresh();
   }
 
+  const visibleNav = NAV.filter(
+    (item) => !item.adminOnly || user.role === "admin",
+  );
+
   const nav = (
     <nav className="flex-1 space-y-1 px-3 py-4">
-      {NAV.map(({ href, label, icon: Icon }) => {
+      {visibleNav.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
@@ -132,8 +143,8 @@ export function AppShell({
           <span className="block truncate text-sm font-medium text-ink">
             {user.name}
           </span>
-          <span className="block truncate text-xs text-ink-muted capitalize">
-            {user.role}
+          <span className="block truncate text-xs text-ink-muted">
+            {roleLabel(user.role)}
           </span>
         </span>
       </Link>

@@ -1,52 +1,73 @@
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
+import { getCurrentUser } from "@/lib/session";
+import { currentScope, loadLookups } from "@/lib/queries";
 import { PageHeader } from "@/components/ui/card";
-import { MessagesClient } from "./messages-client";
-import type { Auditor, District, Message } from "@/lib/types";
+import { MessagesClient, type StaffOption } from "./messages-client";
+import type { Message } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-async function loadData(): Promise<{
-  messages: Message[];
-  districts: District[];
-  auditors: Auditor[];
-}> {
-  if (!isAdminConfigured()) {
-    return { messages: [], districts: [], auditors: [] };
-  }
-
-  const db = adminDb();
-  const [messageSnap, districtSnap, auditorSnap] = await Promise.all([
-    db.collection("messages").orderBy("createdAt", "desc").limit(100).get(),
-    db.collection("districts").orderBy("name").get(),
-    db.collection("auditors").orderBy("name").get(),
-  ]);
-
-  return {
-    messages: messageSnap.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() }) as Message,
-    ),
-    districts: districtSnap.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() }) as District,
-    ),
-    auditors: auditorSnap.docs.map(
-      (doc) => ({ id: doc.id, ...doc.data() }) as Auditor,
-    ),
-  };
-}
-
 export default async function MessagesPage() {
-  const { messages, districts, auditors } = await loadData();
+  const user = await getCurrentUser();
+  const scope = await currentScope();
+
+  // Districts and auditors already come back scoped to this person
+  const { districts, auditors } = await loadLookups(scope);
+
+  let messages: Message[] = [];
+  let staff: StaffOption[] = [];
+
+  if (isAdminConfigured() && user) {
+    const db = adminDb();
+    const [messageSnap, userSnap] = await Promise.all([
+      db.collection("messages").orderBy("createdAt", "desc").limit(200).get(),
+      db.collection("users").orderBy("name").get(),
+    ]);
+
+    messages = messageSnap.docs.map(
+      (doc) => ({ id: doc.id, ...doc.data() }) as Message,
+    );
+
+    /*
+      The system administrator sees every message. Sub-admins see what they
+      sent and what was addressed to them. This mirrors the same rule in the
+      API - the screen must not show more than the endpoint would return.
+    */
+    if (user.role !== "admin") {
+      messages = messages.filter(
+        (m) =>
+          m.sentBy === user.uid ||
+          (m.audience.type === "staff" &&
+            (m.audience.userIds ?? []).includes(user.uid)),
+      );
+    }
+
+    staff = userSnap.docs
+      .filter((doc) => doc.id !== user.uid && doc.data().status !== "inactive")
+      .map((doc) => ({
+        id: doc.id,
+        name: doc.data().name as string,
+        email: doc.data().email as string,
+        role: doc.data().role as string,
+      }));
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="Messages"
-        description="Reach auditors directly — all of them, one district, or a named few."
+        description={
+          user?.role === "admin"
+            ? "Reach auditors and sub-admins. As system administrator you can see every message sent."
+            : "Reach the auditors assigned to you, or message other sub-admins."
+        }
       />
       <MessagesClient
         messages={messages}
         districts={districts}
         auditors={auditors}
+        staff={staff}
+        isAdmin={user?.role === "admin"}
       />
     </div>
   );

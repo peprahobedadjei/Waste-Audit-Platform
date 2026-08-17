@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 import { SESSION_COOKIE, SESSION_MAX_AGE_MS } from "@/lib/session";
+import { startSession } from "@/lib/presence";
 
 // firebase-admin needs real Node APIs; it cannot run on the edge runtime.
 export const runtime = "nodejs";
@@ -71,9 +72,31 @@ export async function POST(request: Request) {
       );
     }
 
+    const account = snap.data() as { name?: string; role?: string; status?: string };
+
+    if (account.status === "inactive") {
+      return NextResponse.json(
+        { error: "This account has been deactivated." },
+        { status: 403 },
+      );
+    }
+
     const sessionCookie = await adminAuth().createSessionCookie(idToken, {
       expiresIn: SESSION_MAX_AGE_MS,
     });
+
+    // Record the sign-in for the activity log. Never let it block login.
+    try {
+      await startSession({
+        subjectId: uid,
+        subjectType: "user",
+        name: account.name ?? "Unknown",
+        role: account.role ?? "manager",
+        userAgent: request.headers.get("user-agent"),
+      });
+    } catch (err) {
+      console.error("[auth/session] could not record sign-in:", err);
+    }
 
     const response = NextResponse.json({ ok: true });
     response.cookies.set(SESSION_COOKIE, sessionCookie, {

@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Badge, Card, CardHeader, EmptyState } from "@/components/ui/card";
+import { LocationField } from "./location-field";
+import type { LatLng } from "@/components/map/map-picker";
 import type { District } from "@/lib/types";
 
 type Editing = District | null;
@@ -14,24 +16,24 @@ type Editing = District | null;
 export function DistrictsClient({
   districts,
   auditorCounts,
+  canEdit = true,
 }: {
   districts: District[];
   auditorCounts: Record<string, number>;
+  canEdit?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Editing>(null);
   const [name, setName] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
+  const [center, setCenter] = useState<LatLng | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   function openCreate() {
     setEditing(null);
     setName("");
-    setLat("");
-    setLng("");
+    setCenter(null);
     setError(null);
     setOpen(true);
   }
@@ -39,8 +41,11 @@ export function DistrictsClient({
   function openEdit(district: District) {
     setEditing(district);
     setName(district.name);
-    setLat(district.centerLat?.toString() ?? "");
-    setLng(district.centerLng?.toString() ?? "");
+    setCenter(
+      district.centerLat != null && district.centerLng != null
+        ? { lat: district.centerLat, lng: district.centerLng }
+        : null,
+    );
     setError(null);
     setOpen(true);
   }
@@ -52,20 +57,9 @@ export function DistrictsClient({
 
     const payload = {
       name: name.trim(),
-      centerLat: lat.trim() ? Number(lat) : null,
-      centerLng: lng.trim() ? Number(lng) : null,
+      centerLat: center?.lat ?? null,
+      centerLng: center?.lng ?? null,
     };
-
-    if (payload.centerLat !== null && Number.isNaN(payload.centerLat)) {
-      setError("Latitude must be a number.");
-      setSaving(false);
-      return;
-    }
-    if (payload.centerLng !== null && Number.isNaN(payload.centerLng)) {
-      setError("Longitude must be a number.");
-      setSaving(false);
-      return;
-    }
 
     const response = await fetch(
       editing ? `/api/districts/${editing.id}` : "/api/districts",
@@ -110,10 +104,12 @@ export function DistrictsClient({
           title="Districts"
           description={`${districts.length} configured`}
           action={
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4" />
-              Add district
-            </Button>
+            canEdit ? (
+              <Button size="sm" onClick={openCreate}>
+                <Plus className="h-4 w-4" />
+                Add district
+              </Button>
+            ) : null
           }
         />
 
@@ -204,6 +200,7 @@ export function DistrictsClient({
         onClose={() => setOpen(false)}
         title={editing ? "Edit district" : "Add district"}
         description="The map centre is optional — it only decides where the live map opens."
+        size="lg"
       >
         <form onSubmit={handleSave} className="space-y-4">
           {error && (
@@ -225,24 +222,12 @@ export function DistrictsClient({
             onChange={(e) => setName(e.target.value)}
           />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              id="district-lat"
-              label="Centre latitude"
-              placeholder="2.0371"
-              inputMode="decimal"
-              value={lat}
-              onChange={(e) => setLat(e.target.value)}
-            />
-            <Input
-              id="district-lng"
-              label="Centre longitude"
-              placeholder="45.3438"
-              inputMode="decimal"
-              value={lng}
-              onChange={(e) => setLng(e.target.value)}
-            />
-          </div>
+          <LocationField
+            districtId={editing?.id}
+            districtName={name}
+            value={center}
+            onChange={setCenter}
+          />
 
           <div className="flex justify-end gap-2 pt-2">
             <Button

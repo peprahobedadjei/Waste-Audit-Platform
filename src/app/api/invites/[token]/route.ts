@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 type Params = { params: Promise<{ token: string }> };
 
 type InviteDoc = {
-  auditorId: string;
+  subjectId?: string;
+  subjectType?: "auditor" | "manager";
+  auditorId?: string;
   expiresAt: string;
   usedAt: string | null;
   revokedAt: string | null;
 };
 
-async function loadInvite(token: string) {
+/**
+ * Resolves an invite token to the account it belongs to. Handles both auditors
+ * (mobile) and sub-admins (dashboard), which live in different collections.
+ */
+export async function loadInvite(token: string) {
   const db = adminDb();
   const snap = await db.collection("invites").doc(token).get();
   if (!snap.exists) return { error: "This invite link is not valid." } as const;
@@ -26,15 +35,19 @@ async function loadInvite(token: string) {
     return { error: "This invite has expired." } as const;
   }
 
-  const auditor = await db.collection("auditors").doc(invite.auditorId).get();
-  if (!auditor.exists) {
+  const subjectType = invite.subjectType ?? "auditor";
+  const subjectId = invite.subjectId ?? invite.auditorId;
+  if (!subjectId) return { error: "This invite is no longer valid." } as const;
+
+  const collection = subjectType === "manager" ? "users" : "auditors";
+  const account = await db.collection(collection).doc(subjectId).get();
+  if (!account.exists) {
     return { error: "This invite is no longer valid." } as const;
   }
 
-  return { invite, auditor } as const;
+  return { invite, subjectId, subjectType, account } as const;
 }
 
-/** Validates a token so the accept page can show who it belongs to. */
 export async function GET(_request: Request, { params }: Params) {
   if (!isAdminConfigured()) {
     return NextResponse.json(
@@ -49,19 +62,25 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
-  const data = result.auditor.data() as { name: string; districtId: string };
-  const district = await adminDb()
-    .collection("districts")
-    .doc(data.districtId)
-    .get();
+  const data = result.account.data() as { name: string; districtId?: string };
+
+  let districtName: string | null = null;
+  if (result.subjectType === "auditor" && data.districtId) {
+    const district = await adminDb()
+      .collection("districts")
+      .doc(data.districtId)
+      .get();
+    districtName = (district.data()?.name as string) ?? null;
+  }
 
   return NextResponse.json({
     name: data.name,
-    districtName: district.data()?.name ?? null,
+    subjectType: result.subjectType,
+    districtName,
   });
 }
 
-/** Consumes the invite and sets the auditor's chosen PIN. */
+/** Consumes the invite and sets the chosen password or PIN. */
 export async function POST(request: Request, { params }: Params) {
   if (!isAdminConfigured()) {
     return NextResponse.json(
@@ -79,34 +98,39 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const pin = body.pin?.trim();
-  if (!pin || pin.length < 6) {
-    return NextResponse.json(
-      { error: "Your PIN must be at least 6 characters." },
-      { status: 400 },
-    );
-  }
-
+  const secret = body.pin?.trim();
   const result = await loadInvite(token);
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
+  // Sub-admins reach the full dashboard, so they get the longer minimum
+  const minimum = result.subjectType === "manager" ? 8 : 6;
+  if (!secret || secret.length < minimum) {
+    return NextResponse.json(
+      {
+        error: `Your ${result.subjectType === "manager" ? "password" : "PIN"} must be at least ${minimum} characters.`,
+      },
+      { status: 400 },
+    );
+  }
+
   const db = adminDb();
   const now = new Date().toISOString();
-  const auditorId = result.invite.auditorId;
 
-  await adminAuth().updateUser(auditorId, {
-    password: pin,
+  await adminAuth().updateUser(result.subjectId, {
+    password: secret,
     emailVerified: true,
   });
 
   await db.collection("invites").doc(token).update({ usedAt: now });
-  await db.collection("auditors").doc(auditorId).update({
+
+  const collection = result.subjectType === "manager" ? "users" : "auditors";
+  await db.collection(collection).doc(result.subjectId).update({
     status: "active",
     activatedAt: now,
     updatedAt: now,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, subjectType: result.subjectType });
 }

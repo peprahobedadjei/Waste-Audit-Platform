@@ -18,16 +18,22 @@ import { Badge, Card, CardHeader, EmptyState } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { Auditor, District, Message } from "@/lib/types";
 
-type AudienceType = "all" | "district" | "auditors";
+type AudienceType = "all" | "district" | "auditors" | "staff";
+
+export type StaffOption = { id: string; name: string; email: string; role: string };
 
 export function MessagesClient({
   messages,
   districts,
   auditors,
+  staff,
+  isAdmin,
 }: {
   messages: Message[];
   districts: District[];
   auditors: Auditor[];
+  staff: StaffOption[];
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -37,11 +43,15 @@ export function MessagesClient({
   for (const d of districts) districtNames[d.id] = d.name;
 
   function describeAudience(message: Message) {
-    if (message.audience.type === "all") return "All auditors";
-    if (message.audience.type === "district") {
-      return districtNames[message.audience.districtId] ?? "A district";
+    const audience = message.audience;
+    if (audience.type === "all") return "All auditors";
+    if (audience.type === "district") {
+      return districtNames[audience.districtId] ?? "A district";
     }
-    return `${message.audience.auditorIds.length} selected`;
+    if (audience.type === "staff") {
+      return `${audience.userIds.length} sub-admin${audience.userIds.length === 1 ? "" : "s"}`;
+    }
+    return `${audience.auditorIds.length} auditor${audience.auditorIds.length === 1 ? "" : "s"}`;
   }
 
   return (
@@ -114,6 +124,8 @@ export function MessagesClient({
         onClose={() => setOpen(false)}
         districts={districts}
         auditors={auditors}
+        staff={staff}
+        isAdmin={isAdmin}
         onSent={(message) => {
           setNotice(message);
           router.refresh();
@@ -128,12 +140,16 @@ function ComposeModal({
   onClose,
   districts,
   auditors,
+  staff,
+  isAdmin,
   onSent,
 }: {
   open: boolean;
   onClose: () => void;
   districts: District[];
   auditors: Auditor[];
+  staff: StaffOption[];
+  isAdmin: boolean;
   onSent: (message: string) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -141,10 +157,13 @@ function ComposeModal({
   const [audienceType, setAudienceType] = useState<AudienceType>("all");
   const [districtId, setDistrictId] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [selectedStaff, setSelectedStaff] = useState<string[]>([]);
   const [alsoEmail, setAlsoEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
+  // Only auditors within this person's scope are offered. The API enforces the
+  // same rule - this just avoids offering something that would be rejected.
   const reachable = auditors.filter((a) => a.status !== "inactive");
 
   const recipientCount =
@@ -152,10 +171,20 @@ function ComposeModal({
       ? reachable.length
       : audienceType === "district"
         ? reachable.filter((a) => a.districtId === districtId).length
-        : selected.length;
+        : audienceType === "staff"
+          ? selectedStaff.length
+          : selected.length;
 
   function toggleAuditor(id: string) {
     setSelected((current) =>
+      current.includes(id)
+        ? current.filter((a) => a !== id)
+        : [...current, id],
+    );
+  }
+
+  function toggleStaff(id: string) {
+    setSelectedStaff((current) =>
       current.includes(id)
         ? current.filter((a) => a !== id)
         : [...current, id],
@@ -172,7 +201,9 @@ function ComposeModal({
         ? { type: "all" as const }
         : audienceType === "district"
           ? { type: "district" as const, districtId }
-          : { type: "auditors" as const, auditorIds: selected };
+          : audienceType === "staff"
+            ? { type: "staff" as const, userIds: selectedStaff }
+            : { type: "auditors" as const, auditorIds: selected };
 
     const response = await fetch("/api/messages", {
       method: "POST",
@@ -253,9 +284,10 @@ function ComposeModal({
           <div className="flex flex-wrap gap-2">
             {(
               [
-                ["all", "All auditors"],
+                ["all", "All my auditors"],
                 ["district", "One district"],
                 ["auditors", "Specific auditors"],
+                ["staff", "Sub-admins"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -322,6 +354,50 @@ function ComposeModal({
               ))
             )}
           </div>
+        )}
+
+        {audienceType === "staff" && (
+          <div className="max-h-52 overflow-y-auto rounded-lg border border-line">
+            {staff.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-ink-muted">
+                There are no other dashboard accounts yet.
+              </p>
+            ) : (
+              staff.map((person) => (
+                <label
+                  key={person.id}
+                  className="flex cursor-pointer items-center gap-3 border-b border-line px-4 py-2.5 last:border-0 hover:bg-surface"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedStaff.includes(person.id)}
+                    onChange={() => toggleStaff(person.id)}
+                    className="h-4 w-4 accent-[var(--brand-primary)]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-ink">
+                      {person.name}
+                      {person.role === "admin" && (
+                        <span className="ml-1.5 text-xs text-ink-muted">
+                          (system administrator)
+                        </span>
+                      )}
+                    </span>
+                    <span className="block truncate text-xs text-ink-muted">
+                      {person.email}
+                    </span>
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
+        )}
+
+        {!isAdmin && (
+          <p className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
+            The system administrator can see all messages sent through this
+            system.
+          </p>
         )}
 
         <label className="flex items-start gap-2.5 rounded-lg border border-line bg-surface px-4 py-3">

@@ -5,18 +5,23 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
 export const INVITE_TTL_DAYS = 7;
 
+export type InviteSubject = "auditor" | "manager";
+
 /**
- * Creates (or replaces) a single-use invite for an auditor and returns the URL
- * to email them. Any earlier unused invite for the same auditor is revoked, so
- * a resend always invalidates the previous link.
+ * Creates (or replaces) a single-use invite and returns the URL to email.
+ * Any earlier unused invite for the same person is revoked, so a resend always
+ * invalidates the previous link.
  */
-export async function createInvite(auditorId: string): Promise<string> {
+export async function createInvite(
+  subjectId: string,
+  subjectType: InviteSubject = "auditor",
+): Promise<string> {
   const db = adminDb();
   const token = randomBytes(32).toString("hex");
 
   const previous = await db
     .collection("invites")
-    .where("auditorId", "==", auditorId)
+    .where("subjectId", "==", subjectId)
     .where("usedAt", "==", null)
     .get();
 
@@ -30,7 +35,10 @@ export async function createInvite(auditorId: string): Promise<string> {
   ).toISOString();
 
   batch.set(db.collection("invites").doc(token), {
-    auditorId,
+    subjectId,
+    subjectType,
+    // Retained so existing auditor invites keep working
+    auditorId: subjectType === "auditor" ? subjectId : null,
     token,
     expiresAt,
     usedAt: null,
@@ -45,13 +53,14 @@ export async function createInvite(auditorId: string): Promise<string> {
 }
 
 /**
- * Reserves the auditor's email in Firebase Auth so it cannot be taken twice.
- * The account exists from this moment but has an unguessable random password -
- * the auditor sets a real PIN when they accept the invite.
+ * Reserves the email in Firebase Auth so it cannot be taken twice. The account
+ * exists from this moment but has an unguessable random password - the person
+ * sets a real one when they accept the invite.
  */
 export async function provisionAuthUser(args: {
   email: string;
   name: string;
+  role?: "auditor" | "manager";
 }): Promise<string> {
   const auth = adminAuth();
 
@@ -65,7 +74,9 @@ export async function provisionAuthUser(args: {
       displayName: args.name,
       emailVerified: false,
     });
-    await auth.setCustomUserClaims(created.uid, { role: "auditor" });
+    await auth.setCustomUserClaims(created.uid, {
+      role: args.role ?? "auditor",
+    });
     return created.uid;
   }
 }

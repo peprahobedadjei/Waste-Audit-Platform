@@ -40,9 +40,11 @@ const STATUS_TONE: Record<AuditorStatus, "success" | "pending" | "neutral"> = {
 export function AuditorsClient({
   auditors,
   districts,
+  canEdit = true,
 }: {
   auditors: Auditor[];
   districts: District[];
+  canEdit?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -162,25 +164,27 @@ export function AuditorsClient({
           title="Auditors"
           description={`${filtered.length} of ${auditors.length} shown`}
           action={
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setCsvOpen(true)}
-                disabled={noDistricts}
-              >
-                <Upload className="h-4 w-4" />
-                Bulk upload
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setAddOpen(true)}
-                disabled={noDistricts}
-              >
-                <Plus className="h-4 w-4" />
-                Add auditor
-              </Button>
-            </div>
+            canEdit ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setCsvOpen(true)}
+                  disabled={noDistricts}
+                >
+                  <Upload className="h-4 w-4" />
+                  Bulk upload
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setAddOpen(true)}
+                  disabled={noDistricts}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add auditor
+                </Button>
+              </div>
+            ) : null
           }
         />
 

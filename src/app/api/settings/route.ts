@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { badRequest, requireUser, serverError } from "@/lib/api-auth";
+import { badRequest, requireAdmin, requireUser, serverError } from "@/lib/api-auth";
 import { DEFAULT_SETTINGS, type AuditSettings } from "@/lib/types";
 
 export async function GET() {
@@ -19,7 +19,8 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const { user, error } = await requireUser();
+  // Admin only - these thresholds govern flagging across every district
+  const { user, error } = await requireAdmin();
   if (error) return error;
 
   let body: Partial<AuditSettings>;

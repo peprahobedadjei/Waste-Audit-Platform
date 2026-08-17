@@ -4,17 +4,24 @@ import { useEffect } from "react";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
+const SIZES = {
+  md: "max-w-md",
+  lg: "max-w-2xl",
+} as const;
+
 export function Modal({
   open,
   onClose,
   title,
   description,
+  size = "md",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   description?: string;
+  size?: keyof typeof SIZES;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -44,7 +51,9 @@ export function Modal({
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-t-xl bg-white shadow-xl sm:rounded-xl">
+      <div
+        className={`relative w-full ${SIZES[size]} rounded-t-xl bg-white shadow-xl sm:rounded-xl`}
+      >
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-ink">{title}</h2>

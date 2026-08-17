@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { ImageUpload } from "@/components/image-upload";
+import { roleLabel } from "@/lib/session-shared";
 import type { SessionUser } from "@/lib/session";
 
 type Pending = { newEmail: string; expiresAt: string } | null;
@@ -115,7 +116,7 @@ function DetailsCard({ user }: { user: SessionUser }) {
           <span className="text-sm text-ink-muted">Displayed as</span>
           <span className="text-sm font-medium text-ink">
             {name || "Your name"}{" "}
-            <Badge tone="success">{user.role}</Badge>
+            <Badge tone="success">{roleLabel(user.role)}</Badge>
           </span>
         </div>
 

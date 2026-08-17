@@ -60,6 +60,59 @@ export const DEFAULT_SETTINGS: AuditSettings = {
   },
 };
 
+/**
+ * What a sub-admin (manager) is allowed to see.
+ *
+ * Auditors are the atomic unit: houses, visits and flags all descend from an
+ * auditor, so scoping people scopes the data automatically. Districts are
+ * carried alongside because houses belong to a place, not a person.
+ *
+ * An auditor may belong to exactly one manager. Districts may be shared - two
+ * managers can split one district between them.
+ */
+export type ManagerScope = {
+  districtIds: string[];
+  auditorIds: string[];
+};
+
+export const EMPTY_SCOPE: ManagerScope = { districtIds: [], auditorIds: [] };
+
+export type ManagerStatus = "invited" | "active" | "inactive";
+
+export type ManagerAccount = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  avatarUrl: string | null;
+  status: ManagerStatus;
+  scope: ManagerScope;
+  invitedAt: string | null;
+  activatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * One sign-in. `logoutAt` is only set when someone signs out deliberately -
+ * closed tabs, dead batteries and expired sessions leave it null forever, so
+ * presence is always inferred from lastSeenAt rather than claimed as fact.
+ */
+export type SessionRecord = {
+  id: string;
+  subjectId: string;
+  subjectType: "user" | "auditor";
+  name: string;
+  role: string;
+  loginAt: string;
+  lastSeenAt: string;
+  logoutAt: string | null;
+  userAgent: string | null;
+};
+
+/** Treated as online if seen within this window. */
+export const ONLINE_WINDOW_MINUTES = 10;
+
 export type House = {
   id: string;
   serialNumber: string;
@@ -111,7 +164,9 @@ export type Visit = {
 export type MessageAudience =
   | { type: "all" }
   | { type: "district"; districtId: string }
-  | { type: "auditors"; auditorIds: string[] };
+  | { type: "auditors"; auditorIds: string[] }
+  /** Other sub-admins and the system administrator. Read in the dashboard. */
+  | { type: "staff"; userIds: string[] };
 
 export type Message = {
   id: string;
