@@ -1,26 +1,56 @@
 @import "tailwindcss";
 
+/*
+  Brand tokens.
+  These are plain CSS custom properties so the admin can override them at
+  runtime (Settings > Branding) by injecting a <style> block on :root.
+  Never hardcode a hex value in a component - always go through these.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand - green */
+  --brand-primary: #16a34a;
+  --brand-hover: #15803d;
+  --brand-dark: #166534;
+  --brand-tint: #dcfce7;
+
+  /* Status */
+  --success: #16a34a;
+  --danger: #dc2626;
+  --pending: #d97706;
+
+  /* Neutrals */
+  --bg: #ffffff;
+  --surface: #f9fafb;
+  --border: #e5e7eb;
+  --text: #111827;
+  --text-muted: #6b7280;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-brand: var(--brand-primary);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-tint: var(--brand-tint);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-pending: var(--pending);
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-ink-muted: var(--text-muted);
+
+  --font-sans: var(--font-sora);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Leaflet renders its own controls; keep them on-brand */
+.leaflet-container {
+  font-family: var(--font-sora), system-ui, sans-serif;
 }
