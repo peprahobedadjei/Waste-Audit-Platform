@@ -25,11 +25,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing ID token." }, { status: 400 });
   }
 
+  let uid: string;
   try {
     const decoded = await adminAuth().verifyIdToken(idToken);
+    uid = decoded.uid;
+  } catch (err) {
+    // A malformed service-account key surfaces here too, and it is not the
+    // user's fault - separate it from a genuinely bad token so the deployment
+    // problem is visible instead of looking like a failed sign-in.
+    const message = err instanceof Error ? err.message : String(err);
+    const isCredentialProblem =
+      /private key|PEM|DECODER|invalid_grant|Failed to parse|credential/i.test(
+        message,
+      );
 
+    console.error("[auth/session] token verification failed:", message);
+
+    if (isCredentialProblem) {
+      return NextResponse.json(
+        {
+          error:
+            "The server's Firebase credentials are not valid. Check FIREBASE_PRIVATE_KEY.",
+        },
+        { status: 503 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Could not verify sign-in." },
+      { status: 401 },
+    );
+  }
+
+  try {
     // Only provisioned users may hold a dashboard session. There is no sign-up.
-    const snap = await adminDb().collection("users").doc(decoded.uid).get();
+    const snap = await adminDb().collection("users").doc(uid).get();
     if (!snap.exists) {
       return NextResponse.json(
         { error: "This account is not provisioned for the dashboard." },
@@ -50,7 +80,20 @@ export async function POST(request: Request) {
       maxAge: SESSION_MAX_AGE_MS / 1000,
     });
     return response;
-  } catch {
-    return NextResponse.json({ error: "Could not verify sign-in." }, { status: 401 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[auth/session] session creation failed:", message);
+
+    if (/NOT_FOUND|database.*does not exist/i.test(message)) {
+      return NextResponse.json(
+        { error: "The Firestore database has not been created for this project." },
+        { status: 503 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Could not complete sign-in. Check the server logs." },
+      { status: 500 },
+    );
   }
 }
