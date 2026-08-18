@@ -6,6 +6,7 @@ import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 import { loadSettings } from "@/lib/visits";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { ReviewActions } from "./review-actions";
+import { ComparisonMap } from "./comparison-map";
 import type { Visit } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -208,6 +209,18 @@ export default async function VisitDetailPage({
                   ? new Date(visit.receivedAt).toLocaleString()
                   : "—"
               }
+            />
+          </div>
+
+          <div className="border-t border-line p-5">
+            <ComparisonMap
+              reference={
+                house?.refLat != null && house?.refLng != null
+                  ? { lat: house.refLat, lng: house.refLng }
+                  : null
+              }
+              submitted={{ lat: visit.lat, lng: visit.lng }}
+              distance={visit.distanceFromRef}
             />
           </div>
         </Card>

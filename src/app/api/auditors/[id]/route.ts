@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { badRequest, requireUser, serverError } from "@/lib/api-auth";
+import { removeAuditorFromScopes } from "@/lib/scope-cleanup";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -53,6 +54,9 @@ export async function PATCH(request: Request, { params }: Params) {
       update.status = body.status;
       // Deactivating must actually revoke access, not just change a label
       await adminAuth().updateUser(id, { disabled: body.status === "inactive" });
+      if (body.status === "inactive") {
+        await removeAuditorFromScopes(id);
+      }
     }
 
     await ref.update(update);
@@ -97,6 +101,7 @@ export async function DELETE(_request: Request, { params }: Params) {
         updatedAt: now,
       });
       await adminAuth().updateUser(id, { disabled: true });
+      await removeAuditorFromScopes(id);
       await db.collection("auditLog").add({
         userId: user.uid,
         action: "auditor.deactivate",
@@ -109,6 +114,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     }
 
     await db.collection("auditors").doc(id).delete();
+    await removeAuditorFromScopes(id);
     try {
       await adminAuth().deleteUser(id);
     } catch {

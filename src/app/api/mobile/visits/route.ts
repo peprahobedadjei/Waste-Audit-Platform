@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { requireAuditor } from "@/lib/mobile-auth";
 import { isValidCoordinate } from "@/lib/geo";
 import { loadSettings, recordVisit, validateVisit } from "@/lib/visits";
+import { firestoreError } from "@/lib/firestore-errors";
 
 /** The auditor's own recent submissions. Read-only history for their app. */
 export async function GET(request: Request) {
@@ -12,32 +13,36 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
 
-  const snap = await adminDb()
-    .collection("visits")
-    .where("auditorId", "==", auditor.uid)
-    .orderBy("capturedAt", "desc")
-    .limit(limit)
-    .get();
+  try {
+    const snap = await adminDb()
+      .collection("visits")
+      .where("auditorId", "==", auditor.uid)
+      .orderBy("capturedAt", "desc")
+      .limit(limit)
+      .get();
 
-  // Deliberately omits `flagged`, `distanceFromRef` and review state. If
-  // auditors could see the outcome they would learn the tolerance radius by
-  // trial and error and work out how far from a house they can stand.
-  const visits = snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      houseId: data.houseId,
-      serialNumber: data.serialNumber,
-      cycleId: data.cycleId,
-      collected: data.collected,
-      satisfied: data.satisfied,
-      cleanlinessRating: data.cleanlinessRating,
-      photoUrl: data.photoUrl,
-      capturedAt: data.capturedAt,
-    };
-  });
+    // Deliberately omits `flagged`, `distanceFromRef` and review state. If
+    // auditors could see the outcome they would learn the tolerance radius by
+    // trial and error and work out how far from a house they can stand.
+    const visits = snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        houseId: data.houseId,
+        serialNumber: data.serialNumber,
+        cycleId: data.cycleId,
+        collected: data.collected,
+        satisfied: data.satisfied,
+        cleanlinessRating: data.cleanlinessRating,
+        photoUrl: data.photoUrl,
+        capturedAt: data.capturedAt,
+      };
+    });
 
-  return NextResponse.json({ visits });
+    return NextResponse.json({ visits });
+  } catch (err) {
+    return firestoreError(err, "Could not load your submissions.");
+  }
 }
 
 /** Submits one visit. The distance check and flag are applied server-side. */

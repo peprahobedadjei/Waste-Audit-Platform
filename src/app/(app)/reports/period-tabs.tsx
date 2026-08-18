@@ -4,15 +4,15 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const PERIODS = [
-  ["daily", "Daily"],
-  ["weekly", "Weekly"],
-  ["monthly", "Monthly"],
-  ["annual", "Annual"],
+  ["cycle", "This cycle"],
+  ["week", "This week"],
+  ["month", "This month"],
+  ["year", "This year"],
 ] as const;
 
 export function PeriodTabs({ current }: { current: string }) {
   return (
-    <div className="mb-6 flex flex-wrap gap-2">
+    <div className="mb-4 flex flex-wrap gap-2 print:hidden">
       {PERIODS.map(([key, label]) => (
         <Link
           key={key}

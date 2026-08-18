@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireAuditor } from "@/lib/mobile-auth";
+import { firestoreError } from "@/lib/firestore-errors";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * Messages sent to this auditor by a manager.
@@ -17,24 +21,28 @@ export async function GET(request: Request) {
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 100);
   const unreadOnly = url.searchParams.get("unread") === "true";
 
-  let query = adminDb()
-    .collection("notifications")
-    .where("auditorId", "==", auditor.uid);
+  try {
+    let query = adminDb()
+      .collection("notifications")
+      .where("auditorId", "==", auditor.uid);
 
-  if (unreadOnly) query = query.where("readAt", "==", null);
+    if (unreadOnly) query = query.where("readAt", "==", null);
 
-  const snap = await query.orderBy("createdAt", "desc").limit(limit).get();
+    const snap = await query.orderBy("createdAt", "desc").limit(limit).get();
 
-  const notifications = snap.docs.map((doc) => ({
-    id: doc.id,
-    title: doc.data().title,
-    body: doc.data().body,
-    readAt: doc.data().readAt,
-    createdAt: doc.data().createdAt,
-  }));
+    const notifications = snap.docs.map((doc) => ({
+      id: doc.id,
+      title: doc.data().title,
+      body: doc.data().body,
+      readAt: doc.data().readAt,
+      createdAt: doc.data().createdAt,
+    }));
 
-  return NextResponse.json({
-    notifications,
-    unread: notifications.filter((n) => !n.readAt).length,
-  });
+    return NextResponse.json({
+      notifications,
+      unread: notifications.filter((n) => !n.readAt).length,
+    });
+  } catch (err) {
+    return firestoreError(err, "Could not load your messages.");
+  }
 }

@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { AlertCircle, ArrowLeft, MapPin } from "lucide-react";
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 import { Badge, Card, CardHeader, EmptyState } from "@/components/ui/card";
 import type { House, Visit } from "@/lib/types";
@@ -22,21 +22,40 @@ export default async function HouseDetailPage({
 
   const house = { id: snap.id, ...snap.data() } as House;
 
-  const [districtSnap, visitSnap, setterSnap] = await Promise.all([
+  const [districtSnap, setterSnap] = await Promise.all([
     db.collection("districts").doc(house.districtId).get(),
-    db
-      .collection("visits")
-      .where("houseId", "==", id)
-      .orderBy("capturedAt", "desc")
-      .get(),
     house.refSetBy
       ? db.collection("auditors").doc(house.refSetBy).get()
       : Promise.resolve(null),
   ]);
 
-  const visits = visitSnap.docs.map(
-    (doc) => ({ id: doc.id, ...doc.data() }) as Visit,
-  );
+  /*
+    The visit history is fetched separately and allowed to fail.
+
+    It needs a composite index (houseId + capturedAt), and if that has not been
+    deployed the query throws. The reference location above is the more
+    important half of this page, so a missing index degrades the history rather
+    than blanking the whole screen.
+  */
+  let visits: Visit[] = [];
+  let historyError: string | null = null;
+
+  try {
+    const visitSnap = await db
+      .collection("visits")
+      .where("houseId", "==", id)
+      .orderBy("capturedAt", "desc")
+      .get();
+    visits = visitSnap.docs.map(
+      (doc) => ({ id: doc.id, ...doc.data() }) as Visit,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[houses/[id]] visit history failed:", message);
+    historyError = /FAILED_PRECONDITION|requires an index/i.test(message)
+      ? "The visit history needs a database index that has not been created yet. See FIRESTORE.md."
+      : "Could not load the visit history.";
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -102,7 +121,12 @@ export default async function HouseDetailPage({
             title="Visit history"
             description={`${visits.length} visit${visits.length === 1 ? "" : "s"} recorded.`}
           />
-          {visits.length === 0 ? (
+          {historyError ? (
+            <div className="m-5 flex items-start gap-2 rounded-lg border border-pending/30 bg-pending/5 px-4 py-3 text-sm text-pending">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{historyError}</span>
+            </div>
+          ) : visits.length === 0 ? (
             <EmptyState title="No visits recorded for this house yet" />
           ) : (
             <ul className="divide-y divide-line">

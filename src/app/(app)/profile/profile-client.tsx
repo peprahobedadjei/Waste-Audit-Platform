@@ -36,16 +36,96 @@ function Alert({ tone, children }: { tone: "error" | "success"; children: React.
 export function ProfileClient({
   user,
   pendingEmail,
+  alertPrefs,
 }: {
   user: SessionUser;
   pendingEmail: Pending;
+  alertPrefs: AlertPrefs;
 }) {
   return (
     <div className="space-y-6">
       <DetailsCard user={user} />
+      <AlertsCard initial={alertPrefs} />
       <EmailCard user={user} pendingEmail={pendingEmail} />
       <PasswordCard />
     </div>
+  );
+}
+
+type AlertPrefs = {
+  flaggedVisits: boolean;
+  missedClusters: boolean;
+  email: boolean;
+};
+
+function AlertsCard({ initial }: { initial: AlertPrefs }) {
+  const [prefs, setPrefs] = useState<AlertPrefs>(initial);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function save(next: AlertPrefs) {
+    setPrefs(next);
+    setSaved(false);
+    setSaving(true);
+    await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alertPrefs: next }),
+    });
+    setSaving(false);
+    setSaved(true);
+  }
+
+  const options = [
+    {
+      key: "flaggedVisits" as const,
+      label: "Flagged visits",
+      hint: "When a visit is submitted too far from the house's reference location.",
+    },
+    {
+      key: "missedClusters" as const,
+      label: "Clusters of missed collections",
+      hint: "When several households in one district report no collection in the same cycle.",
+    },
+    {
+      key: "email" as const,
+      label: "Also send these by email",
+      hint: "Off by default — alerts always appear in the bell regardless.",
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader
+        title="Alerts"
+        description="What the system should tell you about. Auditors never receive these."
+      />
+      <div className="space-y-3 p-5">
+        {options.map(({ key, label, hint }) => (
+          <label
+            key={key}
+            className="flex cursor-pointer items-start gap-3 rounded-lg border border-line px-4 py-3 hover:bg-surface"
+          >
+            <input
+              type="checkbox"
+              checked={prefs[key]}
+              onChange={(e) => save({ ...prefs, [key]: e.target.checked })}
+              className="mt-0.5 h-4 w-4 accent-[var(--brand-primary)]"
+            />
+            <span>
+              <span className="block text-sm font-medium text-ink">{label}</span>
+              <span className="block text-sm text-ink-muted">{hint}</span>
+            </span>
+          </label>
+        ))}
+        {saved && !saving && (
+          <p className="inline-flex items-center gap-1.5 text-sm text-success">
+            <Check className="h-4 w-4" />
+            Saved
+          </p>
+        )}
+      </div>
+    </Card>
   );
 }
 

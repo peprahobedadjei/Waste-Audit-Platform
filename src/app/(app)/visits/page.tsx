@@ -3,6 +3,7 @@ import { ClipboardList } from "lucide-react";
 import { loadLookups, loadVisits } from "@/lib/queries";
 import { Badge, Card, CardHeader, EmptyState, PageHeader } from "@/components/ui/card";
 import { VisitFilters } from "./visit-filters";
+import { ExportVisits } from "./export-visits";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,13 @@ export default async function VisitsPage({
         <CardHeader
           title={`${visits.length} visit${visits.length === 1 ? "" : "s"}`}
           description="Newest first."
+          action={
+            <ExportVisits
+              visits={visits}
+              districtNames={districtNames}
+              auditorNames={auditorNames}
+            />
+          }
         />
 
         <VisitFilters districts={districts} auditors={auditors} />

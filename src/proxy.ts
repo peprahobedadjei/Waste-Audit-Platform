@@ -33,5 +33,8 @@ export const config = {
     "/branding/:path*",
     "/profile/:path*",
     "/settings/:path*",
+    "/managers/:path*",
+    "/activity/:path*",
+    "/audit-log/:path*",
   ],
 };

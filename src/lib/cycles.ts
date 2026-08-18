@@ -79,3 +79,77 @@ export function daysAfterCollection(
 export function currentCycleId(collectionDays: number[]): string | null {
   return resolveCycleId(new Date(), collectionDays);
 }
+
+export type CycleOption = {
+  id: string;
+  label: string;
+  /** Inclusive ISO date of the collection day. */
+  collectionDate: string;
+};
+
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function labelFor(cycleId: string): string {
+  const [y, m, d] = cycleId.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
+    date.getUTCDay()
+  ];
+  return `${weekday} ${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/**
+ * The most recent collection days, newest first.
+ *
+ * Managers think in "last Thursday's collection", so the selector offers real
+ * cycles rather than rolling day windows. A window like "last 7 days" straddles
+ * two collections and produces a number that cannot be reconciled with any
+ * single collection day.
+ */
+export function recentCycles(
+  collectionDays: number[],
+  count = 12,
+  from: Date = new Date(),
+): CycleOption[] {
+  if (collectionDays.length === 0) return [];
+
+  const parts = toEatParts(from);
+  const cursor = new Date(Date.UTC(parts.year, parts.month, parts.day));
+  const cycles: CycleOption[] = [];
+
+  // Look back far enough to gather `count` cycles even at one per week
+  for (let back = 0; back < count * 8 && cycles.length < count; back++) {
+    if (collectionDays.includes(cursor.getUTCDay())) {
+      const id = formatDate(
+        cursor.getUTCFullYear(),
+        cursor.getUTCMonth(),
+        cursor.getUTCDate(),
+      );
+      cycles.push({ id, label: labelFor(id), collectionDate: id });
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+
+  return cycles;
+}
+
+/** Cycle ids covering a trailing number of days, newest first. */
+export function cyclesInRange(
+  collectionDays: number[],
+  days: number,
+): string[] {
+  const from = new Date();
+  const earliest = new Date(Date.now() - days * 86_400_000);
+  const out: string[] = [];
+
+  for (const cycle of recentCycles(collectionDays, 400, from)) {
+    const [y, m, d] = cycle.id.split("-").map(Number);
+    if (Date.UTC(y, m - 1, d) < earliest.getTime()) break;
+    out.push(cycle.id);
+  }
+
+  return out;
+}

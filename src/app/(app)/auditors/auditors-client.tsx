@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -258,7 +259,12 @@ export function AuditorsClient({
                 {filtered.map((auditor) => (
                   <tr key={auditor.id} className="border-b border-line last:border-0">
                     <td className="px-5 py-3.5">
-                      <span className="font-medium text-ink">{auditor.name}</span>
+                      <Link
+                        href={`/auditors/${auditor.id}`}
+                        className="font-medium text-ink hover:text-brand"
+                      >
+                        {auditor.name}
+                      </Link>
                       {auditor.phone && (
                         <span className="block text-xs text-ink-muted">
                           {auditor.phone}

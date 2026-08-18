@@ -17,11 +17,13 @@ import {
   MessageSquare,
   Palette,
   Recycle,
+  ScrollText,
   Settings,
   Users,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AlertBell } from "@/components/alert-bell";
 import { roleLabel } from "@/lib/session-shared";
 import type { SessionUser } from "@/lib/session";
 import type { Branding } from "@/lib/branding-types";
@@ -39,6 +41,7 @@ const NAV = [
   { href: "/reports", label: "Reports", icon: ChartColumn },
   { href: "/managers", label: "Sub-admins", icon: Shield, adminOnly: true },
   { href: "/activity", label: "Activity", icon: Activity, adminOnly: true },
+  { href: "/audit-log", label: "Audit log", icon: ScrollText, adminOnly: true },
   { href: "/branding", label: "Branding", icon: Palette, adminOnly: true },
   { href: "/settings", label: "Settings", icon: Settings, adminOnly: true },
 ];
@@ -184,18 +187,20 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile top bar */}
-        <header className="flex h-16 items-center gap-3 border-b border-line bg-white px-4 lg:hidden">
+        <header className="flex h-16 items-center gap-3 border-b border-line bg-white px-4 print:hidden">
           <button
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Toggle menu"
-            className="rounded-lg p-2 text-ink-muted hover:bg-surface"
+            className="rounded-lg p-2 text-ink-muted hover:bg-surface lg:hidden"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
-          <span className="truncate text-sm font-semibold text-ink">
+          <span className="truncate text-sm font-semibold text-ink lg:hidden">
             {branding.appName}
           </span>
+          <div className="ml-auto">
+            <AlertBell />
+          </div>
         </header>
 
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">{children}</main>

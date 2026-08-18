@@ -1,0 +1,36 @@
+rules_version = '2';
+
+/*
+  Firestore security rules.
+
+  This system deliberately has no direct client access to Firestore. The
+  dashboard and the Android app both talk to Next.js API routes, which use the
+  Firebase Admin SDK - and the Admin SDK bypasses these rules entirely, so
+  legitimate traffic is unaffected by anything written here.
+
+  That makes this file a hard backstop rather than an access model: it exists so
+  that a leaked web API key cannot be used to read audit data straight out of
+  the database. The web API key is public by design - it ships in the browser
+  bundle - so without these rules, anyone who views source could query every
+  collection directly.
+
+  Two rules that matter more than the rest:
+
+  - visits are the evidence. Allowing a client write would let a rebuilt Android
+    app set `flagged: false` on its own submissions, which is precisely the
+    tampering the server-side distance check exists to prevent.
+  - auditLog and sessions must never be writable, or the record of who did what
+    could be rewritten by whoever did it.
+
+  Deploy with:  firebase deploy --only firestore:rules
+*/
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Everything is closed. Access is through the server only.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

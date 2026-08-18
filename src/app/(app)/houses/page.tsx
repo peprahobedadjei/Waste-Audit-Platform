@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Home, MapPin } from "lucide-react";
+import { CopyCheck, Home, MapPin } from "lucide-react";
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 import { currentScope } from "@/lib/queries";
 import { hasAnyScope } from "@/lib/permissions";
@@ -77,6 +77,15 @@ export default async function HousesPage({
       <PageHeader
         title="Houses"
         description="Every household registered by an auditor, with the reference location its visits are checked against."
+        action={
+          <Link
+            href="/houses/duplicates"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink transition-colors hover:bg-surface"
+          >
+            <CopyCheck className="h-4 w-4" />
+            Duplicate serials
+          </Link>
+        }
       />
 
       <Card>

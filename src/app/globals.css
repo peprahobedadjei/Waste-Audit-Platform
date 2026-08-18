@@ -54,3 +54,41 @@ body {
 .leaflet-container {
   font-family: var(--font-sora), system-ui, sans-serif;
 }
+
+/*
+  Print / save-as-PDF.
+
+  Reports are exported by printing rather than by a client-side PDF library:
+  the browser renders the charts and tables exactly as shown, paginates them,
+  and costs nothing in bundle size. These rules strip the app chrome so the
+  page prints as a document rather than a screenshot of an app.
+*/
+@media print {
+  aside,
+  header.lg\:hidden,
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  /* Keep cards and tables from splitting mid-row across pages */
+  .rounded-xl,
+  table,
+  tr {
+    break-inside: avoid;
+  }
+
+  /* Borders and fills are dropped by default in print */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

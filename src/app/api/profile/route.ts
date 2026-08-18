@@ -7,7 +7,15 @@ export async function PATCH(request: Request) {
   const { user, error } = await requireUser();
   if (error) return error;
 
-  let body: { name?: string; avatarUrl?: string | null };
+  let body: {
+    name?: string;
+    avatarUrl?: string | null;
+    alertPrefs?: {
+      flaggedVisits?: boolean;
+      missedClusters?: boolean;
+      email?: boolean;
+    };
+  };
   try {
     body = await request.json();
   } catch {
@@ -17,6 +25,14 @@ export async function PATCH(request: Request) {
   const update: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
   };
+
+  if (body.alertPrefs) {
+    update.alertPrefs = {
+      flaggedVisits: Boolean(body.alertPrefs.flaggedVisits),
+      missedClusters: Boolean(body.alertPrefs.missedClusters),
+      email: Boolean(body.alertPrefs.email),
+    };
+  }
 
   if (body.name !== undefined) {
     const name = body.name.trim();

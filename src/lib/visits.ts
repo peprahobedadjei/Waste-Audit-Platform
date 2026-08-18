@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { distanceMeters } from "@/lib/geo";
 import { resolveCycleId } from "@/lib/cycles";
 import { DEFAULT_SETTINGS, type AuditSettings } from "@/lib/types";
+import { checkMissedCluster, raiseAlert } from "@/lib/alerts";
 import type { AuthedAuditor } from "@/lib/mobile-auth";
 
 export type VisitInput = {
@@ -159,6 +160,40 @@ export async function recordVisit(
       clientId: input.clientId ?? null,
     });
   });
+
+  // Alerts are raised after the write and never block it - a notification
+  // failure must not cost an auditor a completed visit.
+  const cycleId = resolveCycleId(capturedAt, settings.collectionDays);
+
+  if (flagged) {
+    const district = await db
+      .collection("districts")
+      .doc(auditor.districtId)
+      .get();
+
+    await raiseAlert({
+      kind: "flagged_visit",
+      title: `Flagged visit in ${district.data()?.name ?? "a district"}`,
+      body: `${auditor.name} submitted a visit to house ${house.serialNumber} from ${distanceFromRef}m away from its reference location.`,
+      auditorId: auditor.uid,
+      districtId: auditor.districtId,
+      link: `/visits/${visitRef.id}`,
+    });
+  }
+
+  if (!input.collected) {
+    const district = await db
+      .collection("districts")
+      .doc(auditor.districtId)
+      .get();
+
+    await checkMissedCluster({
+      districtId: auditor.districtId,
+      districtName: (district.data()?.name as string) ?? "a district",
+      cycleId,
+      auditorId: auditor.uid,
+    });
+  }
 
   return { ok: true, id: visitRef.id, duplicate: false };
 }
