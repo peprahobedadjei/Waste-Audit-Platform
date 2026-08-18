@@ -30,13 +30,20 @@ export async function GET(request: Request) {
 
     const snap = await query.orderBy("createdAt", "desc").limit(limit).get();
 
-    const notifications = snap.docs.map((doc) => ({
-      id: doc.id,
-      title: doc.data().title,
-      body: doc.data().body,
-      readAt: doc.data().readAt,
-      createdAt: doc.data().createdAt,
-    }));
+    const notifications = snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title,
+        body: data.body,
+        // Older records predate the sender being stored, so fall back rather
+        // than showing a blank name
+        sentByName: (data.sentByName as string | undefined) ?? "Your manager",
+        sentByRole: (data.sentByRole as string | undefined) ?? "manager",
+        readAt: data.readAt,
+        createdAt: data.createdAt,
+      };
+    });
 
     return NextResponse.json({
       notifications,

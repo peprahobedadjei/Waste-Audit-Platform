@@ -33,9 +33,14 @@ export async function GET(request: Request) {
         cycleId: data.cycleId,
         collected: data.collected,
         satisfied: data.satisfied,
+        // The auditor wrote this themselves, so showing it back is fine -
+        // unlike the flag state, which stays hidden
+        note: data.note ?? "",
         cleanlinessRating: data.cleanlinessRating,
+        gpsAccuracy: data.gpsAccuracy,
         photoUrl: data.photoUrl,
         capturedAt: data.capturedAt,
+        receivedAt: data.receivedAt,
       };
     });
 

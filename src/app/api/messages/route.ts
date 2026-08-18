@@ -188,6 +188,11 @@ export async function POST(request: Request) {
             messageId: messageRef.id,
             title,
             body: text,
+            // Denormalised onto the notification so the app can show who sent
+            // it without a second lookup per message
+            sentBy: user.uid,
+            sentByName: user.name,
+            sentByRole: user.role,
             readAt: null,
             createdAt: now,
           });
